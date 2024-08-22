@@ -49,11 +49,12 @@ index = pc.Index(index_nam)
 vectorstore = PineconeVectorStore(index_name=index_nam, embedding=embedd)
 
 # Initialize the conversation history list with a default AI message
-conversation_history = [{"role": "assistant", "content": "Hello! You need to upload documents first to start your conversation"}]
+conversation_history = []
 
 @app.route('/')
 def index():
     return render_template('index.html', conversation_history=conversation_history, upload_success=False)
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -100,10 +101,13 @@ def upload_file():
     if all_documents:
         # Add documents to Pinecone vectorstore
         vectorstore.add_documents(documents=all_documents)
-        return jsonify({'success': True, 'message': 'Files uploaded and processed successfully'})
+
+        # Update conversation history with a greeting from the assistant
+        conversation_history.append({"role": "assistant", "content": "Hello, how can I help you?"})
+
+        return jsonify({'success': True, 'message': 'Files uploaded and processed successfully', 'greeting': 'Hello, how can I help you?'})
     else:
         return jsonify({'success': False, 'message': 'No valid files uploaded'}), 400
-
 
 
 
@@ -159,3 +163,4 @@ Use three sentences maximum and keep the answer concise.\
 
 if __name__ == '__main__':
     app.run(debug=True)
+

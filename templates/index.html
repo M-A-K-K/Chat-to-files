@@ -5,8 +5,8 @@
   <title>Chat With PDF</title>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins">
-
   <style>
+    /* General Styles */
     body {
       overflow-y: hidden;
       font-family: 'Poppins';
@@ -188,12 +188,12 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.5); /* Dim background */
-      display: none; /* Hide it initially */
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
       align-items: center;
       justify-content: center;
-      flex-direction: column; /* Align items vertically */
-      z-index: 1000; /* Ensure it's above other content */
+      flex-direction: column;
+      z-index: 1000;
     }
 
     .loader {
@@ -220,6 +220,52 @@
       color: #fff;
       font-size: 18px;
     }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+    }
+
+    .modal-content {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      margin-left: 500px;
+      margin-top: 350px;
+      max-width: 500px;
+      position: relative;
+    }
+
+    .modal-content p {
+      margin: 0;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: #aaa;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close:hover {
+      color: #000;
+    }
   </style>
 </head>
 <body>
@@ -229,13 +275,11 @@
   </div>
   <div class="container">
     <div class="chatbox" id="chatbox">
-      {% for message in conversation_history %}
-        <div class="message {{ 'user-message' if message.role == 'user' else '' }}">
-          <div class="content">
-            <div class="text">{{ message.content }}</div>
-          </div>
+      <div id="defaultMessage" class="message assistant-message">
+        <div class="content">
+          <div class="text">You need to upload documents to start your chat.</div>
         </div>
-      {% endfor %}
+      </div>
     </div>
     <div class="footer">
       <div class="input-container">
@@ -252,6 +296,14 @@
     <div class="loading-text">Loading...</div>
   </div>
 
+  <!-- Custom Modal -->
+  <div id="customModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <p id="modalMessage">A wise person said you can only upload PDF, DOCX, or TXT files.</p>
+    </div>
+  </div>
+
   <script>
     $(document).ready(function () {
       const chatbox = $('#chatbox');
@@ -259,10 +311,13 @@
       const sendBtn = $('#sendBtn');
       const uploadBtn = $('#uploadBtn');
       const fileInput = $('#fileInput');
-      const overlay = $('#overlay'); // Reference to the overlay element
-  
+      const overlay = $('#overlay');
+      const defaultMessage = $('#defaultMessage');
+      const customModal = $('#customModal');
+      const closeModal = $('.close');
+
       function addMessage(sender, text, id = '') {
-        const messageClass = sender === 'user' ? 'user-message' : '';
+        const messageClass = sender === 'user' ? 'user-message' : 'assistant-message';
         const messageHtml = `
           <div class="message ${messageClass}">
             <div class="content">
@@ -272,70 +327,71 @@
         chatbox.append(messageHtml);
         chatbox.scrollTop(chatbox[0].scrollHeight);
       }
-  
+
       function sendMessage() {
         const userInputValue = userInput.val();
         if (userInputValue.trim() === '') return;
-  
+
         addMessage('user', userInputValue);
         userInput.val('');
-  
+
+        addMessage('assistant', 'Loading...', 'loadingMessage');
+
         $.ajax({
           url: '/query_response',
           method: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({ query: [{ role: 'user', content: userInputValue }] }),
           success: function (response) {
+            $('#loadingMessage').remove();
             addMessage('assistant', response.response);
           },
           error: function () {
+            $('#loadingMessage').remove();
             addMessage('assistant', 'Sorry, something went wrong.');
           }
         });
       }
-  
-      $('#sendBtn').click(function () {
-        sendMessage();
-      });
-  
+
+      sendBtn.click(sendMessage);
+
       userInput.keypress(function (e) {
-        if (e.which === 13 && !e.shiftKey) { // Enter key pressed without Shift
-          e.preventDefault();
+        if (e.which === 13 && !e.shiftKey) {
           sendMessage();
         }
       });
-  
+
       uploadBtn.on('click', function () {
         fileInput.click();
       });
-  
+
       fileInput.on('change', function () {
         const files = fileInput[0].files;
         if (files.length === 0) return;
-  
+
         const allowedExtensions = ['pdf', 'docx', 'txt'];
         let invalidFiles = [];
-  
+
         for (const file of files) {
           const fileType = file.name.split('.').pop().toLowerCase();
           if (!allowedExtensions.includes(fileType)) {
             invalidFiles.push(file.name);
           }
         }
-  
+
         if (invalidFiles.length > 0) {
-          alert('Unsupported file types: ' + invalidFiles.join(', ') + '. Please upload only PDF, DOCX, or TXT files.');
+          $('#modalMessage').text('A wise person said you can only upload PDF, DOCX, or TXT files.');
+          customModal.show();
           return;
         }
-  
-        // Show the loader and overlay
+
         overlay.show();
-  
+
         const formData = new FormData();
         for (const file of files) {
           formData.append('files', file);
         }
-  
+
         $.ajax({
           url: '/upload',
           method: 'POST',
@@ -343,24 +399,33 @@
           processData: false,
           contentType: false,
           success: function (response) {
+            overlay.hide();
+            defaultMessage.remove();
             if (response.success) {
               userInput.prop('disabled', false);
               sendBtn.prop('disabled', false);
+              addMessage('assistant', 'Hello, how can I help you?');
             } else {
               addMessage('assistant', 'Upload Failed: ' + response.message);
             }
-            // Hide the loader and overlay after handling the response
-            overlay.hide();
           },
           error: function () {
-            addMessage('assistant', 'Upload Failed: There was an error uploading your files. Please try again.');
-            // Hide the loader and overlay after handling the error
             overlay.hide();
+            addMessage('assistant', 'Upload Failed: There was an error uploading your files. Please try again.');
           }
         });
       });
+
+      closeModal.on('click', function () {
+        customModal.hide();
+      });
+
+      $(window).on('click', function (event) {
+        if ($(event.target).is(customModal)) {
+          customModal.hide();
+        }
+      });
     });
   </script>
-  
 </body>
 </html>
